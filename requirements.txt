@@ -1,0 +1,10 @@
+certifi==2021.10.8
+config-manager-evjeny==0.3.0
+pip==21.2.4
+pyaes==1.6.1
+pyasn1==0.4.8
+rsa==4.8
+setuptools==58.0.4
+Telethon==1.24.0
+tqdm==4.63.1
+wheel==0.37.1
