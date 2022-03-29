@@ -1,14 +1,9 @@
 import asyncio
-import json
-import time
 
+import aiosqlite
 from config_manager.config import Config
 from telethon import TelegramClient
-from telethon import errors
 import tqdm
-
-
-fetched_posts: list[dict] = []
 
 
 class ExtractorConfig(Config):
@@ -17,19 +12,69 @@ class ExtractorConfig(Config):
     channel_name: str
     channel_posts_limit: int = None
     channel_comments_limit: int = None
-    json_path: str = "result.json"
+    db_name: str = "result.db"
     takeout: bool = False
 
 
-def message_to_dict(message) -> dict:
-    return {
-        "id": message.id,
-        "date": message.date,
-        "text": message.message
-    }
+async def setup_database(db: aiosqlite.Connection):
+    await db.executescript(
+        """
+        DROP TABLE IF EXISTS post;
+        CREATE TABLE post(
+            message_id INTEGER PRIMARY KEY,
+            date TIMESTAMP,
+            text TEXT,
+            from_id INTEGER,
+            views INTEGER
+        );
+
+        DROP TABLE IF EXISTS answer;
+        CREATE TABLE answer(
+            message_id INTEGER PRIMARY KEY,
+            date TIMESTAMP,
+            text TEXT,
+            from_id INTEGER,
+            post_id INTEGER,
+            reply_to_msg_id INTEGER,
+            FOREIGN KEY(post_id) REFERENCES post(message_id) ON DELETE CASCADE
+        );
+        """
+    )
 
 
-async def message_fetcher(client):
+async def message_handler(client: TelegramClient, db: aiosqlite.Connection, channel, message, config: ExtractorConfig):
+    def _get_from_id(message):
+        _from_id = None
+        if hasattr(message.from_id, "user_id"):
+            _from_id = message.from_id.user_id
+        elif hasattr(message.from_id, "channel_id"):
+            _from_id = message.from_id.channel_id
+        return _from_id
+
+    await db.execute(
+        """
+        INSERT INTO post(message_id, date, text, from_id, views)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (message.id, message.date, message.message, _get_from_id(message), message.views)
+    )
+    
+    try:
+        async for answer in client.iter_messages(channel, limit=config.channel_comments_limit, reply_to=message.id):
+            await db.execute(
+                """
+                INSERT INTO answer(message_id, date, text, from_id, post_id, reply_to_msg_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (answer.id, answer.date, answer.message, _get_from_id(answer), message.id, answer.reply_to.reply_to_msg_id)
+            )
+    except:
+        pass
+
+    await db.commit()
+
+
+async def message_fetcher(client: TelegramClient, db: aiosqlite.Connection, config: ExtractorConfig):
     channel = await client.get_input_entity(config.channel_name)
                 
     pbar = tqdm.tqdm(desc="parsing posts")
@@ -37,19 +82,7 @@ async def message_fetcher(client):
         if message.peer_id.channel_id != channel.channel_id:
             continue
 
-        cur_message = message_to_dict(message)
-        cur_message["views"] = message.views
-        cur_message["comments"] = []
-        
-        try:
-            async for answer in client.iter_messages(channel, limit=config.channel_comments_limit, reply_to=message.id):
-                cur_answer = message_to_dict(answer)
-                cur_answer["reply_to_msg_id"] = answer.reply_to.reply_to_msg_id
-                cur_message["comments"].append(cur_answer)
-        except:
-            pass
-        
-        fetched_posts.append(cur_message)
+        await message_handler(client, db, channel, message, config)
         pbar.update()
 
 
@@ -58,26 +91,11 @@ async def main(config: ExtractorConfig):
 
     client = TelegramClient("extractor", config.api_id, config.api_hash)
 
-    if config.takeout:
-        while True:
-            try:
-                async with client, client.takeout() as takeout:
-                    await message_fetcher(takeout)
-            except errors.TakeoutInitDelayError as e:
-                print(f"Must wait {e.seconds} before takeout...")
-                time.sleep(e.seconds)
-                print("Trying again...")
-            break
-    else:
-        async with client:
-            await message_fetcher(client)
+    async with client, aiosqlite.connect(config.db_name) as db:
+        await setup_database(db)
+        await message_fetcher(client, db, config)
         
 
 if __name__ == "__main__":
     config = ExtractorConfig().parse_arguments("Telegram channel extractor")
-
-    try:
-        asyncio.run(main(config))
-    except KeyboardInterrupt:
-        with open(config.json_path, "w+", encoding="utf-8") as f:
-            json.dump(fetched_posts, f, default=str, ensure_ascii=False)
+    asyncio.run(main(config))

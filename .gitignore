@@ -131,4 +131,5 @@ dmypy.json
 # Project files
 *.session
 *.session-journal
-*.json
+*.db
+*.db-journal

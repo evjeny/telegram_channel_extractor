@@ -20,7 +20,7 @@ By default you can run parsing of all the posts (starting from most recent) with
 python main.py --api_id 12345 \
     --api_hash 0123456789abcdef0123456789abcdef \
     --channel_name $some_channel_you_may_know \
-    --json_path $some_channel_you_may_know.json
+    --db_name $some_channel_you_may_know.db
 ```
 
 To limit posts' or comments count, you can use `--channel_posts_limit` and `--channel_comments_limit` parameters, e.g. get maximum 10 posts with 50 comments each:
@@ -29,17 +29,16 @@ To limit posts' or comments count, you can use `--channel_posts_limit` and `--ch
 python main.py --api_id 12345 \
     --api_hash 0123456789abcdef0123456789abcdef \
     --channel_name $some_channel_you_may_know \
-    --json_path $some_channel_you_may_know.json \
+    --db_name $some_channel_you_may_know.db \
     --channel_posts_limit 10 \
     --channel_comments_limit 50
 ```
 
-Since telegram has limitation on requests amount, to lowen delays you can use `takeout` mode (it requires additional confirmation through Telegram app):
+## Fetch data from database
+
+Data is being saved to sqlite3 database.
+To get data schema you can run [check_db.py](check_db.py):
 
 ```bash
-python main.py --api_id 12345 \
-    --api_hash 0123456789abcdef0123456789abcdef \
-    --channel_name $some_channel_you_may_know \
-    --json_path $some_channel_you_may_know.json \
-    --takeout true
+python check_db.py --db_name $some_channel_you_may_know.db
 ```
