@@ -3,6 +3,7 @@ import asyncio
 import aiosqlite
 from config_manager.config import Config
 from telethon import TelegramClient
+from telethon import errors
 import tqdm
 
 
@@ -93,7 +94,17 @@ async def main(config: ExtractorConfig):
 
     async with client, aiosqlite.connect(config.db_name) as db:
         await setup_database(db)
-        await message_fetcher(client, db, config)
+
+        if config.takeout:
+            print("Starting in takeout mode...")
+            try:
+                async with client.takeout() as takeout:
+                    await message_fetcher(takeout, db, config)
+            except errors.TakeoutInitDelayError as e:
+                print(f"Must wait {e.seconds} before takeout")
+        else:
+            print("Starting in client mode...")
+            await message_fetcher(client, db, config)
         
 
 if __name__ == "__main__":

@@ -23,10 +23,12 @@ def main(config: CheckerConfig):
 
         print("TABLE post VALUES")
         print(db.execute("SELECT * FROM post LIMIT 5").fetchall())
+        print("Total records:", db.execute("SELECT COUNT(*) FROM post").fetchone()[0])
         print()
 
         print("TABLE answer VALUES")
         print(db.execute("SELECT * FROM answer LIMIT 10").fetchall())
+        print("Total records:", db.execute("SELECT COUNT(*) FROM answer").fetchone()[0])
         print()
 
 
